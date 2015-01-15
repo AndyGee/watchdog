@@ -28,6 +28,7 @@ import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 
 public class SimpleWatchdog implements Runnable {
 
+    public static final String WATCH = "bob.txt";
     public static String[] args;
 
     public static void main(final String[] args) {
@@ -36,7 +37,10 @@ public class SimpleWatchdog implements Runnable {
 
         Runtime.getRuntime().addShutdownHook(new Thread() {
             public void run() {
-                // TODO - Cleanup
+                final File f = new File(System.getProperty("user.dir"), WATCH);
+                if (f.exists() && !f.delete()) {
+                    f.deleteOnExit();
+                }
             }
 
         });
@@ -72,6 +76,10 @@ public class SimpleWatchdog implements Runnable {
                 try {
                     key = watcher.take();
                 } catch (final InterruptedException x) {
+                    try {
+                        watcher.close();
+                    } catch (final Throwable ignored) {
+                    }
                     return;
                 }
 
@@ -80,7 +88,7 @@ public class SimpleWatchdog implements Runnable {
                     try {
                         final WatchEvent.Kind<?> kind = event.kind();
 
-                        if (kind == OVERFLOW) {
+                        if (kind == OVERFLOW || kind == ENTRY_DELETE) {
                             continue;
                         }
 
@@ -89,10 +97,18 @@ public class SimpleWatchdog implements Runnable {
 
                         try {
                             final Path child = dir.resolve(filename);
-                            if (Files.probeContentType(child).equals("text/plain")) {
-                                System.out.format("Process file %s%n", filename);
-                            } else {
-                                System.err.format("File '%s' is not a plain text file.%n", filename);
+                            if (null != child) {
+                                final String contentType = Files.probeContentType(child);
+                                if (null != contentType && contentType.equals("text/plain")) {
+
+                                    if (WATCH.equals(child.toFile().getName())) {
+                                        System.out.format("Process file %s%n", filename);
+                                    }
+
+
+                                } else {
+                                    System.err.format("File '%s' is not a plain text file.%n", filename);
+                                }
                             }
                         } catch (final IOException x) {
                             System.err.println(x);
